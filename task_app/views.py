@@ -1,8 +1,11 @@
 from rest_framework.views import APIView
+from rest_framework import viewsets, status
 from rest_framework.response import Response
 from django.core.cache import cache
 from celery.result import AsyncResult
 from .tasks import add
+from .models import Image
+from .serializers import ImageSerializer
 
 
 class AddView(APIView):
@@ -33,5 +36,32 @@ class MyDataView(APIView):
             }
             # 將數據存入緩存，設置過期時間（例如60秒）
             cache.set('my_data_key', data, timeout=60)
-        
+
         return Response(data)
+
+
+class ImageViewSet(viewsets.ModelViewSet):
+    queryset = Image.objects.all()
+    serializer_class = ImageSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        print(serializer)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request, pk=None, *args, **kwargs):
+        queryset = self.get_queryset()
+        try:
+            image = queryset.get(pk=pk)
+        except Image.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(image)
+        return Response(serializer.data)
