@@ -1,3 +1,4 @@
+import boto3
 from rest_framework.views import APIView
 from rest_framework import viewsets, status
 from rest_framework.response import Response
@@ -65,3 +66,39 @@ class ImageViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_404_NOT_FOUND)
         serializer = self.get_serializer(image)
         return Response(serializer.data)
+
+
+class CloudWatchViewSet(viewsets.ModelViewSet):
+    def list(self, request, *args, **kwargs):
+        cloudwatch = boto3.client('cloudwatch', region_name='ap-northeast-3')
+        autoscaling = boto3.client('autoscaling', region_name='ap-northeast-3')
+
+        try:
+            alarms = cloudwatch.describe_alarms(AlarmNames=[
+                                                'awsec2-i-078795b97e4f10b86-GreaterThanOrEqualToThreshold-CPUUtilization'])
+            if alarms['MetricAlarms']:
+                alarm = alarms['MetricAlarms'][0]
+                state = alarm['StateValue']
+                state_reason = alarm['StateReason']
+
+                if state == 'ALARM':
+                    # 替换 'CloudWatchPractice_autoscaling' 为你的 Auto Scaling 组名称
+                    response = autoscaling.describe_auto_scaling_groups(
+                        AutoScalingGroupNames=['CloudWatchPractice_autoscaling'])
+                    group = response['AutoScalingGroups'][0]
+                    current_desired_capacity = group['DesiredCapacity']
+                    new_desired_capacity = current_desired_capacity + 1
+
+                    autoscaling.set_desired_capacity(
+                        AutoScalingGroupName='CloudWatchPractice_autoscaling',
+                        DesiredCapacity=new_desired_capacity,
+                        HonorCooldown=False
+                    )
+                    return Response({'message': 'Auto Scaling group capacity increased', 'new_desired_capacity': new_desired_capacity}, status=status.HTTP_200_OK)
+                else:
+                    return Response({'message': f'Alarm state is {state}, Alarm state reason is {state_reason}. No action taken.'}, status=status.HTTP_200_OK)
+            else:
+                return Response({'error': 'Alarm not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

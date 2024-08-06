@@ -4,6 +4,8 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'images', views.ImageViewSet)
+router.register(r'cloudwatch-alarm-status',
+                views.CloudWatchViewSet, basename='cloudwatch-alarm-status')
 
 urlpatterns = [
     path('task/', views.AddView.as_view(), name='task'),
